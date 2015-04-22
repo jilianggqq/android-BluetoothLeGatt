@@ -21,8 +21,10 @@ import android.app.ListActivity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothManager;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.Handler;
@@ -42,7 +44,7 @@ import java.util.ArrayList;
 /**
  * Activity for scanning and displaying available Bluetooth LE devices.
  */
-public class DeviceScanActivity extends ListActivity {
+public class DeviceScanActivity2 extends ListActivity {
     private LeDeviceListAdapter mLeDeviceListAdapter;
     private BluetoothAdapter mBluetoothAdapter;
     private boolean mScanning;
@@ -52,7 +54,7 @@ public class DeviceScanActivity extends ListActivity {
     // Stops scanning after 10 seconds.
     private static final long SCAN_PERIOD = 10000;
     private static final String CLASS_TAG = "DeviceScanActivity";
-
+    private static final String FOUND_DEVICE = "FOUND_DEVICE";
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -72,7 +74,9 @@ public class DeviceScanActivity extends ListActivity {
         // BluetoothAdapter through BluetoothManager.
         final BluetoothManager bluetoothManager =
                 (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
-        mBluetoothAdapter = bluetoothManager.getAdapter();
+//        mBluetoothAdapter = bluetoothManager.getAdapter();
+        mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+
 
         // Checks if Bluetooth is supported on the device.
         if (mBluetoothAdapter == null) {
@@ -80,6 +84,15 @@ public class DeviceScanActivity extends ListActivity {
             finish();
             return;
         }
+
+        IntentFilter filter = new IntentFilter();
+
+        filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
+        filter.addAction(BluetoothDevice.ACTION_FOUND);
+        filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_STARTED);
+        filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
+
+        registerReceiver(mReceiver, filter);
     }
 
     @Override
@@ -166,8 +179,10 @@ public class DeviceScanActivity extends ListActivity {
         intent.putExtra(DeviceControlActivity.EXTRAS_DEVICE_NAME, device.getName());
         intent.putExtra(DeviceControlActivity.EXTRAS_DEVICE_ADDRESS, device.getAddress());
         if (mScanning) {
-            mBluetoothAdapter.stopLeScan(mLeScanCallback);
+//            mBluetoothAdapter.stopLeScan(mLeScanCallback);
+            mBluetoothAdapter.cancelDiscovery();
             mScanning = false;
+
         }
         startActivity(intent);
     }
@@ -175,20 +190,24 @@ public class DeviceScanActivity extends ListActivity {
     private void scanLeDevice(final boolean enable) {
         if (enable) {
             // Stops scanning after a pre-defined scan period.
-            mHandler.postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    mScanning = false;
-                    mBluetoothAdapter.stopLeScan(mLeScanCallback);
-                    invalidateOptionsMenu();
-                }
-            }, SCAN_PERIOD);
+//            mHandler.postDelayed(new Runnable() {
+//                @Override
+//                public void run() {
+//                    mScanning = false;
+//                    mBluetoothAdapter.stopLeScan(mLeScanCallback);
+//                    invalidateOptionsMenu();
+//                }
+//            }, SCAN_PERIOD);
+//
+//            mScanning = true;
+//            mBluetoothAdapter.startLeScan(mLeScanCallback);
 
-            mScanning = true;
-            mBluetoothAdapter.startLeScan(mLeScanCallback);
+            mBluetoothAdapter.startDiscovery();
+
         } else {
             mScanning = false;
-            mBluetoothAdapter.stopLeScan(mLeScanCallback);
+//            mBluetoothAdapter.stopLeScan(mLeScanCallback);
+            mBluetoothAdapter.cancelDiscovery();
         }
         invalidateOptionsMenu();
     }
@@ -201,7 +220,7 @@ public class DeviceScanActivity extends ListActivity {
         public LeDeviceListAdapter() {
             super();
             mLeDevices = new ArrayList<BluetoothDevice>();
-            mInflator = DeviceScanActivity.this.getLayoutInflater();
+            mInflator = DeviceScanActivity2.this.getLayoutInflater();
         }
 
         public void addDevice(BluetoothDevice device) {
@@ -278,4 +297,55 @@ public class DeviceScanActivity extends ListActivity {
         TextView deviceName;
         TextView deviceAddress;
     }
+
+    private void showToast(String message) {
+        Toast.makeText(getApplicationContext(), message, Toast.LENGTH_SHORT).show();
+    }
+
+    protected final BroadcastReceiver mReceiver = new BroadcastReceiver() {
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+
+            if (BluetoothAdapter.ACTION_STATE_CHANGED.equals(action)) {
+                final int state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR);
+
+                if (state == BluetoothAdapter.STATE_ON) {
+                    Log.d(FOUND_DEVICE, "state_on");
+
+//                    showToast("Enabled");
+
+//                    showEnabled();
+                    mLeDeviceListAdapter.clear();
+                }
+            } else if (BluetoothAdapter.ACTION_DISCOVERY_STARTED.equals(action)) {
+                Log.d(FOUND_DEVICE, "started");
+
+//                mDeviceList = new ArrayList<BluetoothDevice>();
+//
+//                mProgressDlg.show();
+                mLeDeviceListAdapter.clear();
+            } else if (BluetoothAdapter.ACTION_DISCOVERY_FINISHED.equals(action)) {
+                Log.d(FOUND_DEVICE, "Finished");
+//                mProgressDlg.dismiss();
+//
+//                Intent newIntent = new Intent(MainActivity.this, DeviceListActivity.class);
+//
+//                newIntent.putParcelableArrayListExtra("device.list", mDeviceList);
+//
+//                startActivity(newIntent);
+                mLeDeviceListAdapter.notifyDataSetChanged();
+                invalidateOptionsMenu();
+            } else if (BluetoothDevice.ACTION_FOUND.equals(action)) {
+                Log.d(FOUND_DEVICE, "ACTION_FOUND");
+                BluetoothDevice device = (BluetoothDevice) intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+                mLeDeviceListAdapter.addDevice(device);
+//                mDeviceList.add(device);
+
+                showToast("Found device " + device.getName());
+            }
+        }
+
+
+    };
+
 }
